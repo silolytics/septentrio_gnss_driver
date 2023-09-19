@@ -124,6 +124,12 @@ namespace io {
          */
         void sendVelocity(const std::string& velNmea);
 
+                        /**
+         * @brief Hands over to the send() method of manager_ Used for rtcm data does not require a response
+         * @param cmd The command to hand over
+         */
+        void sendRtcm(const std::string&);
+
     private:
         /**
          * @brief Resets Rx settings
@@ -149,6 +155,7 @@ namespace io {
          * @param cmd The command to hand over
          */
         void send(const std::string&);
+
 
         //! Pointer to Node
         ROSaicNodeBase* node_;

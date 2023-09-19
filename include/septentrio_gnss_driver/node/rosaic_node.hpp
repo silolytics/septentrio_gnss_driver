@@ -71,6 +71,8 @@
 #include <tf2_ros/transform_listener.h>
 // ROSaic includes
 #include <septentrio_gnss_driver/communication/communication_core.hpp>
+// rtcm msessage include
+#include <rtcm_msgs/Message.h>
 
 /**
  * @namespace rosaic_node
@@ -88,7 +90,7 @@ namespace rosaic_node {
         //! The constructor initializes and runs the ROSaic node, if everything works
         //! fine. It loads the user-defined ROS parameters, subscribes to Rx
         //! messages, and publishes requested ROS messages...
-        ROSaicNode();
+        ROSaicNode(const ros::NodeHandle& nh);
 
     private:
         /**
@@ -125,6 +127,20 @@ namespace rosaic_node {
                     double& yaw) const;
 
         void sendVelocity(const std::string& velNmea);
+        /**
+         * @brief The callback for the rtcm msg
+         * 
+         * @param msg 
+         */
+        void rtcmCallback(const rtcm_msgs::Message & msg);
+        /**
+         * @brief Subscriber to rctm msg
+         * 
+         */
+        ros::Subscriber rtcmSub_;
+
+        std::string ntripInput_;
+        ros::NodeHandle nh_;
 
         //! Handles communication with the Rx
         io::CommunicationCore IO_;

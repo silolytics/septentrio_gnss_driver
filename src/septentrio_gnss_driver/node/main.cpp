@@ -39,9 +39,9 @@
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "septentrio_gnss");
-  	
+  	ros::NodeHandle nh;
     rosaic_node::ROSaicNode
-        rx_node; // This launches everything we need, in theory :)
+        rx_node(nh); // This launches everything we need, in theory :)
     ros::spin();
     
     return 0;

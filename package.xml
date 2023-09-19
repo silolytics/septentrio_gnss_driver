@@ -52,6 +52,7 @@
   
   <depend>diagnostic_msgs</depend>
   <depend>nmea_msgs</depend>
+  <depend>rtcm_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
@@ -67,7 +68,6 @@
   <build_depend>cpp_common</build_depend>
   <build_depend>rosconsole</build_depend>
   <build_depend>message_generation</build_depend>
-
 
   <build_depend>roscpp</build_depend>
   <build_depend>roscpp_serialization</build_depend>

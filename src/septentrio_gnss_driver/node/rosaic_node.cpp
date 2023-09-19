@@ -38,7 +38,7 @@
  * @brief The heart of the ROSaic driver: The ROS node that represents it
  */
 
-rosaic_node::ROSaicNode::ROSaicNode() : IO_(this)
+rosaic_node::ROSaicNode::ROSaicNode(const ros::NodeHandle& nh) : IO_(this), nh_(nh)
 {
     param("activate_debug_log", settings_.activate_debug_log, false);
     if (settings_.activate_debug_log)
@@ -57,7 +57,9 @@ rosaic_node::ROSaicNode::ROSaicNode() : IO_(this)
     // Parameters must be set before initializing IO
     if (!getROSParams())
         return;
-
+    
+    // Set up ntrip subscriber
+    rtcmSub_ = nh_.subscribe(ntripInput_, 1, &ROSaicNode::rtcmCallback, this);
     // Initializes Connection
     IO_.connect();
 
@@ -66,6 +68,7 @@ rosaic_node::ROSaicNode::ROSaicNode() : IO_(this)
 
 [[nodiscard]] bool rosaic_node::ROSaicNode::getROSParams()
 {
+    param("ntrip_input", ntripInput_, static_cast<std::string>("/ntrip_client/rtcm"));
     param("use_gnss_time", settings_.use_gnss_time, true);
     param("latency_compensation", settings_.latency_compensation, false);
     param("frame_id", settings_.frame_id, static_cast<std::string>("gnss"));
@@ -786,4 +789,14 @@ void rosaic_node::ROSaicNode::getRPY(const QuaternionMsg& qm, double& roll,
 void rosaic_node::ROSaicNode::sendVelocity(const std::string& velNmea)
 {
     IO_.sendVelocity(velNmea);
+}
+
+void rosaic_node::ROSaicNode::rtcmCallback(const rtcm_msgs::Message & msg){
+    std::stringstream aa;
+    std::vector<u_char> data_out;
+    data_out.resize(msg.message.size());
+    for (auto b : msg.message) {
+      aa << b;
+    }
+    IO_.sendRtcm(aa.str());  //ss.str()
 }
