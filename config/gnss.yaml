@@ -1,9 +1,7 @@
 # Configuration Settings for the Rover Rx
 
 # GNSS/INS Parameters
-
-# We set this with a udev rule. Use /dev/ttyACM0 or so in if you don't have udev rule set
-device: serial:/dev/septentrioMosaic
+device: tcp://192.168.3.1:28784
 
 serial:
   baudrate: 921600
@@ -117,4 +115,4 @@ publish:
 
 # logger
 
-activate_debug_log: true
+activate_debug_log: false
