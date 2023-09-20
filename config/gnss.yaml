@@ -60,6 +60,7 @@ use_gnss_time: false
 
 latency_compensation: false
 
+ntrip_input: "/ntrip_client/rtcm"
 rtk_settings:  
   ntrip_1:
     id: ""
