@@ -59,7 +59,7 @@ rosaic_node::ROSaicNode::ROSaicNode(const ros::NodeHandle& nh) : IO_(this), nh_(
         return;
     
     // Set up ntrip subscriber
-    rtcmSub_ = nh_.subscribe(ntripInput_, 1, &ROSaicNode::rtcmCallback, this);
+    rtcmSub_ = nh_.subscribe(ntripInput_, 0, &ROSaicNode::rtcmCallback, this);
     // Initializes Connection
     IO_.connect();
 
@@ -798,5 +798,6 @@ void rosaic_node::ROSaicNode::rtcmCallback(const rtcm_msgs::Message & msg){
     for (auto b : msg.message) {
       aa << b;
     }
-    IO_.sendRtcm(aa.str());  //ss.str()
+                this->log(log_level::WARN, "Waiting for transform from" + aa.str());
+    IO_.sendRtcm(aa.str()); 
 }
