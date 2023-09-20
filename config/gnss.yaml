@@ -2,7 +2,7 @@
 
 # GNSS/INS Parameters
 
-device: serial:/dev/ttyACM1
+device: tcp://10.42.0.127:28784       #######serial:/dev/ttyACM0
 
 serial:
   baudrate: 921600

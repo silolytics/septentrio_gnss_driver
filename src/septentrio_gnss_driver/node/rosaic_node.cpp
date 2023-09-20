@@ -798,5 +798,5 @@ void rosaic_node::ROSaicNode::rtcmCallback(const rtcm_msgs::Message & msg){
     for (auto b : msg.message) {
       aa << b;
     }
-    IO_.sendRtcm(aa.str());  //ss.str()
+    IO_.sendRtcm(aa.str());  
 }

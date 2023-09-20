@@ -78,6 +78,7 @@
 #include <nmea_msgs/Gpgsa.h>
 #include <nmea_msgs/Gpgsv.h>
 #include <nmea_msgs/Gprmc.h>
+#include <nmea_msgs/Sentence.h>
 // INS msg includes
 #include <septentrio_gnss_driver/ExtSensorMeas.h>
 #include <septentrio_gnss_driver/IMUSetup.h>
