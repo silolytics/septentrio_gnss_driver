@@ -70,7 +70,7 @@
 // ROSaic includes
 #include <septentrio_gnss_driver/communication/communication_core.hpp>
 // rtcm msessage include Added send ntrip via ros topics over serial
-#include <rtcm_msgs/Message.h>
+#include <rtcm_msgs/msg/Message.hpp>
 
 /**
  * @namespace rosaic_node
