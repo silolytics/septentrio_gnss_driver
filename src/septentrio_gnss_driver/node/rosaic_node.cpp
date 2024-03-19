@@ -64,13 +64,12 @@ rosaic_node::ROSaicNode::ROSaicNode(const rclcpp::NodeOptions & options)
     return;
   }
 
-  // Set up the subscriber to the rctm data
-  rctmSub_ =
-    this->create_subscription<rctm_msgs::msg::Message>(
-    ntripInput_, 1,
-    std::bind(&ROSaicNode::rtcmCallback, this, _1));
-    // Initializes Connection
-    IO_.connect();
+  // Set up the subscriber to the rtcm data
+  rtcmSub_ = create_subscription<rtcm_msgs::msg::Message>(
+    ntripInput_, rclcpp::SensorDataQoS(),
+    std::bind(&ROSaicNode::rtcmCallback, this, std::placeholders::_1));
+  // Initializes Connection
+  IO_.connect();
 
   this->log(log_level::DEBUG, "Leaving ROSaicNode() constructor..");
 }
@@ -863,6 +862,16 @@ void rosaic_node::ROSaicNode::sendVelocity(const std::string & velNmea)
   IO_.sendVelocity(velNmea);
 }
 
+void rosaic_node::ROSaicNode::rtcmCallback(const rtcm_msgs::msg::Message & msg)
+{
+  std::stringstream aa;
+  std::vector<u_char> data_out;
+  data_out.resize(msg.message.size());
+  for (auto b : msg.message) {
+    aa << b;
+  }
+  IO_.sendRtcm(aa.str());    //ss.str()
+}
 #include "rclcpp_components/register_node_macro.hpp"
 
 // Register the component with class_loader.

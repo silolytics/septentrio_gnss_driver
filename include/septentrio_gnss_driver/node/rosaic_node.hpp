@@ -70,7 +70,7 @@
 // ROSaic includes
 #include <septentrio_gnss_driver/communication/communication_core.hpp>
 // rtcm msessage include Added send ntrip via ros topics over serial
-#include <rtcm_msgs/msg/Message.hpp>
+#include <rtcm_msgs/msg/message.hpp>
 
 /**
  * @namespace rosaic_node
@@ -131,9 +131,9 @@ namespace rosaic_node {
          * 
          * @param msg 
          */
-        void rtcmCallback(const rtcm_msgs::Message & msg);
+        void rtcmCallback(const rtcm_msgs::msg::Message & msg);
 
-        rclcpp::Subscription<rctm_msgs::msg::Message>::SharedPtr rctmSub_;
+        rclcpp::Subscription<rtcm_msgs::msg::Message>::SharedPtr rtcmSub_;
         //! Store the ntrip input in that string
         std::string ntripInput_;
         //! Handles communication with the Rx
