@@ -69,6 +69,8 @@
 #include <tf2_ros/transform_listener.h>
 // ROSaic includes
 #include <septentrio_gnss_driver/communication/communication_core.hpp>
+// rtcm msessage include Added send ntrip via ros topics over serial
+#include <rtcm_msgs/Message.h>
 
 /**
  * @namespace rosaic_node
@@ -124,6 +126,16 @@ namespace rosaic_node {
 
         void sendVelocity(const std::string& velNmea);
 
+         /**
+         * @brief The callback for the rtcm msg
+         * 
+         * @param msg 
+         */
+        void rtcmCallback(const rtcm_msgs::Message & msg);
+
+        rclcpp::Subscription<rctm_msgs::msg::Message>::SharedPtr rctmSub_;
+        //! Store the ntrip input in that string
+        std::string ntripInput_;
         //! Handles communication with the Rx
         io::CommunicationCore IO_;
         //! tf2 buffer and listener

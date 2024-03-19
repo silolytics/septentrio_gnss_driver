@@ -28,6 +28,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(rtcm_msgs REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system thread regex chrono)
@@ -90,6 +91,7 @@ set(dependencies
    tf2_eigen
    tf2_geometry_msgs
    tf2_ros
+   rtcm_msgs
 )
 
 ## shared library

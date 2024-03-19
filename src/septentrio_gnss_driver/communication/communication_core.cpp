@@ -975,4 +975,9 @@ namespace io {
         telegramHandler_.waitForResponse();
     }
 
+    void CommunicationCore::sendRtcm(const std::string& rtcm)
+    {
+        manager_.get()->send(rtcm);
+    }
+
 } // namespace io

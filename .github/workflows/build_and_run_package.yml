@@ -1,0 +1,19 @@
+name: build-dev-package
+on: 
+  workflow_dispatch:
+  push:
+    branches:
+      - ros2
+jobs:
+  docker-ros:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ika-rwth-aachen/docker-ros@v1.3.1
+        with:
+          command: ros2 launch septentrio_gnss_driver rover_node.launch.py
+          base-image: rwthika/ros2:humble-ros-core
+          ros-distro: humble
+          platform: amd64
+      - name: Clean up
+        run: |
+          docker system prune -a -f
