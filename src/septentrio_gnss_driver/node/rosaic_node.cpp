@@ -63,6 +63,13 @@ rosaic_node::ROSaicNode::ROSaicNode(const rclcpp::NodeOptions& options) :
     if (!getROSParams())
         return;
 
+     // Set up the subscriber to the rtcm data
+    rtcmSub_ = create_subscription<rtcm_msgs::msg::Message>(
+                ntripInput_, rclcpp::SensorDataQoS(),
+                std::bind(&ROSaicNode::rtcmCallback, this, std::placeholders::_1));
+
+
+
     // Initializes Connection
     IO_.connect();
 
@@ -71,6 +78,7 @@ rosaic_node::ROSaicNode::ROSaicNode(const rclcpp::NodeOptions& options) :
 
 [[nodiscard]] bool rosaic_node::ROSaicNode::getROSParams()
 {
+    param("ntrip_input", ntripInput_, static_cast<std::string>("/ntrip_client/rtcm"));
     param("ntp_server", settings_.ntp_server, false);
     param("ptp_server_clock", settings_.ptp_server_clock, false);
     param("use_gnss_time", settings_.use_gnss_time, false);
@@ -772,6 +780,16 @@ void rosaic_node::ROSaicNode::sendVelocity(const std::string& velNmea)
     IO_.sendVelocity(velNmea);
 }
 
+void rosaic_node::ROSaicNode::rtcmCallback(const rtcm_msgs::msg::Message & msg)
+{
+  std::stringstream aa;
+  std::vector<u_char> data_out;
+  data_out.resize(msg.message.size());
+  for (auto b : msg.message) {
+    aa << b;
+  }
+  IO_.sendRtcm(aa.str());    //ss.str()
+}
 #include "rclcpp_components/register_node_macro.hpp"
 
 // Register the component with class_loader.

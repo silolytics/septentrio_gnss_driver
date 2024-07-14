@@ -69,6 +69,8 @@
 #include <tf2_ros/transform_listener.h>
 // ROSaic includes
 #include <septentrio_gnss_driver/communication/communication_core.hpp>
+// Needed to subscribe to rtcm msgs and receive ntrip from host
+#include <rtcm_msgs/msg/message.hpp>
 
 /**
  * @namespace rosaic_node
@@ -129,5 +131,23 @@ namespace rosaic_node {
         //! tf2 buffer and listener
         tf2_ros::Buffer tfBuffer_;
         std::unique_ptr<tf2_ros::TransformListener> tfListener_;
+
+        /**
+         * @brief Suscription to external ntrip to send it to device
+         * 
+         * @param msg 
+         */
+        void rtcmCallback(const rtcm_msgs::msg::Message & msg);
+
+        /**
+         * @brief The subcription
+         * 
+         */
+        rclcpp::Subscription<rtcm_msgs::msg::Message>::SharedPtr rtcmSub_;
+        //! Store the ntrip input in that string
+        std::string ntripInput_;
+
+
+
     };
 } // namespace rosaic_node
