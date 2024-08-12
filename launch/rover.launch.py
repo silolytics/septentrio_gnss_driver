@@ -42,4 +42,4 @@ def generate_launch_description():
         output='screen'
     )
 
-    return launch.LaunchDescription([arg_file_name, arg_file_path, container, tf_imu, tf_gnss, tf_vsm, tf_aux1])
+    return launch.LaunchDescription([arg_file_name, arg_file_path, container])

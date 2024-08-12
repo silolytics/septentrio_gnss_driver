@@ -16,7 +16,7 @@ os.environ['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '{time}: [{name}] [{severity}]\t{m
 def generate_launch_description():
 
 
-    default_file_name = 'gnss.yaml'
+    default_file_name = 'rover_node.yaml'
     name_arg_file_name = "file_name"
     arg_file_name = DeclareLaunchArgument(name_arg_file_name,
                                           default_value=TextSubstitution(text=str(default_file_name)))
@@ -25,11 +25,14 @@ def generate_launch_description():
                                           default_value=[get_package_share_directory('septentrio_gnss_driver'), '/config/', LaunchConfiguration(name_arg_file_name)])
 
     node = Node(
-            package='septentrio_gnss_driver',
-            executable='septentrio_gnss_driver_node',
-            name='septentrio_gnss_driver',
-            emulate_tty=True,
-            sigterm_timeout = '20',
-            parameters=[LaunchConfiguration(name_arg_file_path)])
+                package='septentrio_gnss_driver',
+                namespace='septentrio_gnss',
+                executable='septentrio_gnss_driver_node',
+                name='septentrio_gnss_driver',
+                respawn=True,
+                respawn_delay=4,
+                emulate_tty=True,
+                sigterm_timeout = '20',
+                parameters=[LaunchConfiguration(name_arg_file_path)])
 
     return launch.LaunchDescription([arg_file_name, arg_file_path, node])
