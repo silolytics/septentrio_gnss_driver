@@ -16,7 +16,7 @@ os.environ['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '{time}: [{name}] [{severity}]\t{m
 def generate_launch_description():
 
 
-    default_file_name = 'rover_node.yaml'
+    default_file_name = 'gnss.yaml'
     name_arg_file_name = "file_name"
     arg_file_name = DeclareLaunchArgument(name_arg_file_name,
                                           default_value=TextSubstitution(text=str(default_file_name)))
@@ -32,7 +32,7 @@ def generate_launch_description():
                 respawn=True,
                 respawn_delay=4,
                 emulate_tty=True,
-                sigterm_timeout = '20',
+                sigterm_timeout = '10',
                 parameters=[LaunchConfiguration(name_arg_file_path)])
 
     return launch.LaunchDescription([arg_file_name, arg_file_path, node])

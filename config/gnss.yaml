@@ -31,7 +31,7 @@ osnma:
   ntp_server: ""
   keep_open: true
 
-frame_id: gnss
+frame_id: gps
 
 aux1_frame_id: gps_base
 
