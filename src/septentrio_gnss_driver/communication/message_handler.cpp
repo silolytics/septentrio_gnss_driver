@@ -54,12 +54,13 @@ using parsing_utilities::rad2deg;
 using parsing_utilities::square;
 
 namespace io {
+
     void MessageHandler::assemblePoseWithCovarianceStamped()
     {
         if (!settings_->publish_pose)
             return;
 
-        static auto last_ins_tow = last_insnavgeod_.block_header.tow;
+        thread_local auto last_ins_tow = last_insnavgeod_.block_header.tow;
 
         PoseWithCovarianceStampedMsg msg;
         if (settings_->septentrio_receiver_type == "ins")
@@ -90,41 +91,35 @@ namespace io {
             }
             if ((last_insnavgeod_.sb_list & 2) != 0)
             {
-                double yaw = last_insnavgeod_.heading;
-                double pitch = last_insnavgeod_.pitch;
-                double roll = last_insnavgeod_.roll;
+                double yaw = deg2rad(last_insnavgeod_.heading);
+                double pitch = deg2rad(last_insnavgeod_.pitch);
+                double roll = deg2rad(last_insnavgeod_.roll);
                 // Attitude
-                msg.pose.pose.orientation = convertEulerToQuaternionMsg(
-                    deg2rad(roll), deg2rad(pitch), deg2rad(yaw));
+                if (validValue(last_insnavgeod_.heading) &&
+                    validValue(last_insnavgeod_.pitch) &&
+                    validValue(last_insnavgeod_.roll))
+                {
+                    msg.pose.pose.orientation =
+                        convertEulerToQuaternionMsg(roll, pitch, yaw);
+                } else if (validValue(last_insnavgeod_.heading))
+                {
+                    msg.pose.pose.orientation =
+                        convertEulerToQuaternionMsg(0.0, 0.0, yaw);
+                }
             } else
             {
-                msg.pose.pose.orientation.w =
-                    std::numeric_limits<double>::quiet_NaN();
-                msg.pose.pose.orientation.x =
-                    std::numeric_limits<double>::quiet_NaN();
-                msg.pose.pose.orientation.y =
-                    std::numeric_limits<double>::quiet_NaN();
-                msg.pose.pose.orientation.z =
-                    std::numeric_limits<double>::quiet_NaN();
+                parsing_utilities::setQuaternionNaN(msg.pose.pose.orientation);
             }
             if ((last_insnavgeod_.sb_list & 4) != 0)
             {
                 // Attitude autocov
-                if (validValue(last_insnavgeod_.roll_std_dev))
-                    msg.pose.covariance[21] =
-                        square(deg2rad(last_insnavgeod_.roll_std_dev));
-                else
-                    msg.pose.covariance[21] = -1.0;
-                if (validValue(last_insnavgeod_.pitch_std_dev))
-                    msg.pose.covariance[28] =
-                        square(deg2rad(last_insnavgeod_.pitch_std_dev));
-                else
-                    msg.pose.covariance[28] = -1.0;
-                if (validValue(last_insnavgeod_.heading_std_dev))
-                    msg.pose.covariance[35] =
-                        square(deg2rad(last_insnavgeod_.heading_std_dev));
-                else
-                    msg.pose.covariance[35] = -1.0;
+                msg.pose.covariance[21] = parsing_utilities::convertAutoCovariance(
+                    last_insnavgeod_.roll_std_dev);
+                msg.pose.covariance[28] = parsing_utilities::convertAutoCovariance(
+                    last_insnavgeod_.pitch_std_dev);
+                msg.pose.covariance[35] = parsing_utilities::convertAutoCovariance(
+                    last_insnavgeod_.heading_std_dev);
+
             } else
             {
                 msg.pose.covariance[21] = -1.0;
@@ -144,17 +139,19 @@ namespace io {
             if ((last_insnavgeod_.sb_list & 64) != 0)
             {
                 // Attitude cov
-                msg.pose.covariance[22] = deg2radSq(last_insnavgeod_.pitch_roll_cov);
-                msg.pose.covariance[23] =
-                    deg2radSq(last_insnavgeod_.heading_roll_cov);
-                msg.pose.covariance[27] = deg2radSq(last_insnavgeod_.pitch_roll_cov);
+                msg.pose.covariance[22] = parsing_utilities::convertCovariance(
+                    last_insnavgeod_.pitch_roll_cov);
+                msg.pose.covariance[23] = parsing_utilities::convertCovariance(
+                    last_insnavgeod_.heading_roll_cov);
+                msg.pose.covariance[27] = parsing_utilities::convertCovariance(
+                    last_insnavgeod_.pitch_roll_cov);
 
-                msg.pose.covariance[29] =
-                    deg2radSq(last_insnavgeod_.heading_pitch_cov);
-                msg.pose.covariance[33] =
-                    deg2radSq(last_insnavgeod_.heading_roll_cov);
-                msg.pose.covariance[34] =
-                    deg2radSq(last_insnavgeod_.heading_pitch_cov);
+                msg.pose.covariance[29] = parsing_utilities::convertCovariance(
+                    last_insnavgeod_.heading_pitch_cov);
+                msg.pose.covariance[33] = parsing_utilities::convertCovariance(
+                    last_insnavgeod_.heading_roll_cov);
+                msg.pose.covariance[34] = parsing_utilities::convertCovariance(
+                    last_insnavgeod_.heading_pitch_cov);
             }
         } else
         {
@@ -173,6 +170,10 @@ namespace io {
             double yaw = last_atteuler_.heading;
             double pitch = last_atteuler_.pitch;
             double roll = last_atteuler_.roll;
+
+            roll = std::isnan(roll) ? 0.0 : roll;
+            pitch = std::isnan(pitch) ? 0.0 : pitch;
+
             msg.pose.pose.orientation = convertEulerToQuaternionMsg(
                 deg2rad(roll), deg2rad(pitch), deg2rad(yaw));
             msg.pose.pose.position.x = rad2deg(last_pvtgeodetic_.longitude);
@@ -188,15 +189,24 @@ namespace io {
             msg.pose.covariance[12] = last_poscovgeodetic_.cov_lonhgt;
             msg.pose.covariance[13] = last_poscovgeodetic_.cov_lathgt;
             msg.pose.covariance[14] = last_poscovgeodetic_.cov_hgthgt;
-            msg.pose.covariance[21] = deg2radSq(last_attcoveuler_.cov_rollroll);
-            msg.pose.covariance[22] = deg2radSq(last_attcoveuler_.cov_pitchroll);
-            msg.pose.covariance[23] = deg2radSq(last_attcoveuler_.cov_headroll);
-            msg.pose.covariance[27] = deg2radSq(last_attcoveuler_.cov_pitchroll);
-            msg.pose.covariance[28] = deg2radSq(last_attcoveuler_.cov_pitchpitch);
-            msg.pose.covariance[29] = deg2radSq(last_attcoveuler_.cov_headpitch);
-            msg.pose.covariance[33] = deg2radSq(last_attcoveuler_.cov_headroll);
-            msg.pose.covariance[34] = deg2radSq(last_attcoveuler_.cov_headpitch);
-            msg.pose.covariance[35] = deg2radSq(last_attcoveuler_.cov_headhead);
+            msg.pose.covariance[21] = parsing_utilities::convertAutoCovariance(
+                last_attcoveuler_.cov_rollroll);
+            msg.pose.covariance[22] = parsing_utilities::convertCovariance(
+                last_attcoveuler_.cov_pitchroll);
+            msg.pose.covariance[23] =
+                parsing_utilities::convertCovariance(last_attcoveuler_.cov_headroll);
+            msg.pose.covariance[27] = parsing_utilities::convertCovariance(
+                last_attcoveuler_.cov_pitchroll);
+            msg.pose.covariance[28] = parsing_utilities::convertAutoCovariance(
+                last_attcoveuler_.cov_pitchpitch);
+            msg.pose.covariance[29] = parsing_utilities::convertCovariance(
+                last_attcoveuler_.cov_headpitch);
+            msg.pose.covariance[33] =
+                parsing_utilities::convertCovariance(last_attcoveuler_.cov_headroll);
+            msg.pose.covariance[34] = parsing_utilities::convertCovariance(
+                last_attcoveuler_.cov_headpitch);
+            msg.pose.covariance[35] = parsing_utilities::convertAutoCovariance(
+                last_attcoveuler_.cov_headhead);
         }
         publish<PoseWithCovarianceStampedMsg>("pose", msg);
     };
@@ -565,6 +575,7 @@ namespace io {
 
     void MessageHandler::assembleImu()
     {
+        // INS tow and extsens meas tow have the same time scale
         ImuMsg msg;
 
         msg.header = last_extsensmeas_.header;
@@ -577,84 +588,85 @@ namespace io {
         msg.angular_velocity.y = deg2rad(last_extsensmeas_.angular_rate_y);
         msg.angular_velocity.z = deg2rad(last_extsensmeas_.angular_rate_z);
 
+        Timestamp tsImu = timestampSBF(last_extsensmeas_.block_header.tow,
+                                       last_extsensmeas_.block_header.wnc);
+        Timestamp tsIns = timestampSBF(last_insnavgeod_.block_header.tow,
+                                       last_insnavgeod_.block_header.wnc);
+
         bool valid_orientation = false;
-        if (validValue(last_insnavgeod_.block_header.tow))
+        if (validValue(last_insnavgeod_.block_header.tow) && (tsImu == tsIns))
         {
-            // INS tow and extsens meas tow have the same time scale
-            Timestamp tsImu = timestampSBF(last_extsensmeas_.block_header.tow,
-                                           last_extsensmeas_.block_header.wnc);
-            Timestamp tsIns = timestampSBF(last_insnavgeod_.block_header.tow,
-                                           last_insnavgeod_.block_header.wnc);
-
-            static int64_t maxDt = (settings_->polling_period_pvt == 0)
-                                       ? 10000000
-                                       : settings_->polling_period_pvt * 1000000;
-            if ((tsImu - tsIns) > maxDt)
+            if ((last_insnavgeod_.sb_list & 2) != 0)
             {
-                valid_orientation = false;
-            } else
-            {
-                if ((last_insnavgeod_.sb_list & 2) != 0)
+                // Attitude
+                if (validValue(last_insnavgeod_.heading) &&
+                    validValue(last_insnavgeod_.pitch) &&
+                    validValue(last_insnavgeod_.roll))
                 {
-                    // Attitude
-                    if (validValue(last_insnavgeod_.heading) &&
-                        validValue(last_insnavgeod_.pitch) &&
-                        validValue(last_insnavgeod_.roll))
-                    {
-                        msg.orientation = convertEulerToQuaternionMsg(
-                            deg2rad(last_insnavgeod_.roll),
-                            deg2rad(last_insnavgeod_.pitch),
-                            deg2rad(last_insnavgeod_.heading));
-                        valid_orientation = true;
-                    }
+                    msg.orientation = convertEulerToQuaternionMsg(
+                        deg2rad(last_insnavgeod_.roll),
+                        deg2rad(last_insnavgeod_.pitch),
+                        deg2rad(last_insnavgeod_.heading));
+                    valid_orientation = true;
+                } else if (validValue(last_insnavgeod_.heading))
+                {
+                    msg.orientation = convertEulerToQuaternionMsg(
+                        0.0, 0.0, deg2rad(last_insnavgeod_.heading));
+                    valid_orientation = true;
                 }
-                if ((last_insnavgeod_.sb_list & 4) != 0)
+            }
+            if ((last_insnavgeod_.sb_list & 4) != 0)
+            {
+                // Attitude autocov
+                if (validValue(last_insnavgeod_.roll_std_dev) &&
+                    validValue(last_insnavgeod_.pitch_std_dev) &&
+                    validValue(last_insnavgeod_.heading_std_dev))
                 {
-                    // Attitude autocov
-                    if (validValue(last_insnavgeod_.roll_std_dev) &&
-                        validValue(last_insnavgeod_.pitch_std_dev) &&
-                        validValue(last_insnavgeod_.heading_std_dev))
-                    {
-                        msg.orientation_covariance[0] =
-                            square(deg2rad(last_insnavgeod_.roll_std_dev));
-                        msg.orientation_covariance[4] =
-                            square(deg2rad(last_insnavgeod_.pitch_std_dev));
-                        msg.orientation_covariance[8] =
-                            square(deg2rad(last_insnavgeod_.heading_std_dev));
+                    msg.orientation_covariance[0] =
+                        parsing_utilities::convertAutoCovariance(
+                            last_insnavgeod_.roll_std_dev);
+                    msg.orientation_covariance[4] =
+                        parsing_utilities::convertAutoCovariance(
+                            last_insnavgeod_.pitch_std_dev);
+                    msg.orientation_covariance[8] =
+                        parsing_utilities::convertAutoCovariance(
+                            last_insnavgeod_.heading_std_dev);
 
-                        if ((last_insnavgeod_.sb_list & 64) != 0)
-                        {
-                            // Attitude cov
-                            msg.orientation_covariance[1] =
-                                deg2radSq(last_insnavgeod_.pitch_roll_cov);
-                            msg.orientation_covariance[2] =
-                                deg2radSq(last_insnavgeod_.heading_roll_cov);
-                            msg.orientation_covariance[3] =
-                                deg2radSq(last_insnavgeod_.pitch_roll_cov);
-
-                            msg.orientation_covariance[5] =
-                                deg2radSq(last_insnavgeod_.heading_pitch_cov);
-                            msg.orientation_covariance[6] =
-                                deg2radSq(last_insnavgeod_.heading_roll_cov);
-                            msg.orientation_covariance[7] =
-                                deg2radSq(last_insnavgeod_.heading_pitch_cov);
-                        }
-                    } else
+                    if ((last_insnavgeod_.sb_list & 64) != 0)
                     {
-                        msg.orientation_covariance[0] = -1.0;
-                        msg.orientation_covariance[4] = -1.0;
-                        msg.orientation_covariance[8] = -1.0;
+                        // Attitude cov
+                        msg.orientation_covariance[1] =
+                            parsing_utilities::convertCovariance(
+                                last_insnavgeod_.pitch_roll_cov);
+                        msg.orientation_covariance[2] =
+                            parsing_utilities::convertCovariance(
+                                last_insnavgeod_.heading_roll_cov);
+                        msg.orientation_covariance[3] =
+                            parsing_utilities::convertCovariance(
+                                last_insnavgeod_.pitch_roll_cov);
+
+                        msg.orientation_covariance[5] =
+                            parsing_utilities::convertCovariance(
+                                last_insnavgeod_.heading_pitch_cov);
+                        msg.orientation_covariance[6] =
+                            parsing_utilities::convertCovariance(
+                                last_insnavgeod_.heading_roll_cov);
+                        msg.orientation_covariance[7] =
+                            parsing_utilities::convertCovariance(
+                                last_insnavgeod_.heading_pitch_cov);
                     }
+                } else
+                {
+                    msg.orientation_covariance[0] = -1.0;
+                    msg.orientation_covariance[4] = -1.0;
+                    msg.orientation_covariance[8] = -1.0;
                 }
             }
         }
 
         if (!valid_orientation)
         {
-            msg.orientation.w = std::numeric_limits<double>::quiet_NaN();
-            msg.orientation.x = std::numeric_limits<double>::quiet_NaN();
-            msg.orientation.y = std::numeric_limits<double>::quiet_NaN();
-            msg.orientation.z = std::numeric_limits<double>::quiet_NaN();
+            parsing_utilities::setQuaternionNaN(msg.orientation);
         }
 
         publish<ImuMsg>("imu", msg);
@@ -671,9 +683,7 @@ namespace io {
         msg.twist.covariance[28] = -1.0;
         msg.twist.covariance[35] = -1.0;
         // Set angular velocities to NaN
-        msg.twist.twist.angular.x = std::numeric_limits<double>::quiet_NaN();
-        msg.twist.twist.angular.y = std::numeric_limits<double>::quiet_NaN();
-        msg.twist.twist.angular.z = std::numeric_limits<double>::quiet_NaN();
+        parsing_utilities::setVector3NaN(msg.twist.twist.angular);
 
         if (fromIns)
         {
@@ -701,9 +711,7 @@ namespace io {
                 msg.twist.twist.linear.z = vel(2);
             } else
             {
-                msg.twist.twist.linear.x = std::numeric_limits<double>::quiet_NaN();
-                msg.twist.twist.linear.y = std::numeric_limits<double>::quiet_NaN();
-                msg.twist.twist.linear.z = std::numeric_limits<double>::quiet_NaN();
+                parsing_utilities::setVector3NaN(msg.twist.twist.linear);
             }
 
             if (((last_insnavgeod_.sb_list & 16) != 0) &&
@@ -807,9 +815,7 @@ namespace io {
                 msg.twist.twist.linear.z = vel(2);
             } else
             {
-                msg.twist.twist.linear.x = std::numeric_limits<double>::quiet_NaN();
-                msg.twist.twist.linear.y = std::numeric_limits<double>::quiet_NaN();
-                msg.twist.twist.linear.z = std::numeric_limits<double>::quiet_NaN();
+                parsing_utilities::setVector3NaN(msg.twist.twist.linear);
             }
 
             if (last_velcovgeodetic_.error == 0)
@@ -963,9 +969,15 @@ namespace io {
         }
 
         // Euler angles
-        double roll = deg2rad(last_insnavgeod_.roll);
-        double pitch = deg2rad(last_insnavgeod_.pitch);
-        double yaw = deg2rad(last_insnavgeod_.heading);
+        double roll = 0.0;
+        double pitch = 0.0;
+        double yaw = 0.0;
+        if (validValue(last_insnavgeod_.roll))
+            roll = deg2rad(last_insnavgeod_.roll);
+        if (validValue(last_insnavgeod_.pitch))
+            pitch = deg2rad(last_insnavgeod_.pitch);
+        if (validValue(last_insnavgeod_.heading))
+            yaw = deg2rad(last_insnavgeod_.heading);
         // meridian_convergence for conversion from true north to grid north
         if (settings_->use_ros_axis_orientation)
             yaw += deg2rad(meridian_convergence);
@@ -979,29 +991,17 @@ namespace io {
                 convertEulerToQuaternionMsg(roll, pitch, yaw);
         } else
         {
-            msg.pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
-            msg.pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
-            msg.pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
-            msg.pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
+            parsing_utilities::setQuaternionNaN(msg.pose.pose.orientation);
         }
         if ((last_insnavgeod_.sb_list & 4) != 0)
         {
             // Attitude autocovariance
-            if (validValue(last_insnavgeod_.roll_std_dev))
-                msg.pose.covariance[21] =
-                    square(deg2rad(last_insnavgeod_.roll_std_dev));
-            else
-                msg.pose.covariance[21] = -1.0;
-            if (validValue(last_insnavgeod_.pitch_std_dev))
-                msg.pose.covariance[28] =
-                    square(deg2rad(last_insnavgeod_.pitch_std_dev));
-            else
-                msg.pose.covariance[28] = -1.0;
-            if (validValue(last_insnavgeod_.heading_std_dev))
-                msg.pose.covariance[35] =
-                    square(deg2rad(last_insnavgeod_.heading_std_dev));
-            else
-                msg.pose.covariance[35] = -1.0;
+            msg.pose.covariance[21] = parsing_utilities::convertAutoCovariance(
+                last_insnavgeod_.roll_std_dev);
+            msg.pose.covariance[28] = parsing_utilities::convertAutoCovariance(
+                last_insnavgeod_.pitch_std_dev);
+            msg.pose.covariance[35] = parsing_utilities::convertAutoCovariance(
+                last_insnavgeod_.heading_std_dev);
         } else
         {
             msg.pose.covariance[21] = -1.0;
@@ -1057,13 +1057,19 @@ namespace io {
         if ((last_insnavgeod_.sb_list & 64) != 0)
         {
             // Attitude covariancae
-            msg.pose.covariance[22] = deg2radSq(last_insnavgeod_.pitch_roll_cov);
-            msg.pose.covariance[23] = deg2radSq(last_insnavgeod_.heading_roll_cov);
-            msg.pose.covariance[27] = deg2radSq(last_insnavgeod_.pitch_roll_cov);
+            msg.pose.covariance[22] = parsing_utilities::convertCovariance(
+                last_insnavgeod_.pitch_roll_cov);
+            msg.pose.covariance[23] = parsing_utilities::convertCovariance(
+                last_insnavgeod_.heading_roll_cov);
+            msg.pose.covariance[27] = parsing_utilities::convertCovariance(
+                last_insnavgeod_.pitch_roll_cov);
 
-            msg.pose.covariance[29] = deg2radSq(last_insnavgeod_.heading_pitch_cov);
-            msg.pose.covariance[33] = deg2radSq(last_insnavgeod_.heading_roll_cov);
-            msg.pose.covariance[34] = deg2radSq(last_insnavgeod_.heading_pitch_cov);
+            msg.pose.covariance[29] = parsing_utilities::convertCovariance(
+                last_insnavgeod_.heading_pitch_cov);
+            msg.pose.covariance[33] = parsing_utilities::convertCovariance(
+                last_insnavgeod_.heading_roll_cov);
+            msg.pose.covariance[34] = parsing_utilities::convertCovariance(
+                last_insnavgeod_.heading_pitch_cov);
         }
 
         assembleLocalizationMsgTwist(roll, pitch, yaw, msg);
@@ -1126,9 +1132,15 @@ namespace io {
         }
 
         // Euler angles
-        double roll = deg2rad(last_insnavcart_.roll);
-        double pitch = deg2rad(last_insnavcart_.pitch);
-        double yaw = deg2rad(last_insnavcart_.heading);
+        double roll = 0.0;
+        double pitch = 0.0;
+        double yaw = 0.0;
+        if (validValue(last_insnavcart_.roll))
+            roll = deg2rad(last_insnavcart_.roll);
+        if (validValue(last_insnavcart_.pitch))
+            pitch = deg2rad(last_insnavcart_.pitch);
+        if (validValue(last_insnavcart_.heading))
+            yaw = deg2rad(last_insnavcart_.heading);
 
         if ((last_insnavcart_.sb_list & 2) != 0)
         {
@@ -1149,38 +1161,22 @@ namespace io {
                 parsing_utilities::quaternionToQuaternionMsg(q_b_ecef);
         } else
         {
-            msg.pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
-            msg.pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
-            msg.pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
-            msg.pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
+            parsing_utilities::setQuaternionNaN(msg.pose.pose.orientation);
         }
         Eigen::Matrix3d covAtt_local = Eigen::Matrix3d::Zero();
         bool covAttValid = true;
         if ((last_insnavgeod_.sb_list & 4) != 0)
         {
             // Attitude autocovariance
-            if (validValue(last_insnavgeod_.roll_std_dev))
-                covAtt_local(0, 0) = square(deg2rad(last_insnavgeod_.roll_std_dev));
-            else
-            {
-                covAtt_local(0, 0) = -1.0;
-                covAttValid = false;
-            }
-            if (validValue(last_insnavgeod_.pitch_std_dev))
-                covAtt_local(1, 1) = square(deg2rad(last_insnavgeod_.pitch_std_dev));
-            else
-            {
-                covAtt_local(1, 1) = -1.0;
-                covAttValid = false;
-            }
-            if (validValue(last_insnavgeod_.heading_std_dev))
-                covAtt_local(2, 2) =
-                    square(deg2rad(last_insnavgeod_.heading_std_dev));
-            else
-            {
-                covAtt_local(2, 2) = -1.0;
-                covAttValid = false;
-            }
+            covAtt_local(0, 0) = parsing_utilities::convertAutoCovariance(
+                last_insnavgeod_.roll_std_dev);
+            covAtt_local(1, 1) = parsing_utilities::convertAutoCovariance(
+                last_insnavgeod_.pitch_std_dev);
+            covAtt_local(2, 2) = parsing_utilities::convertAutoCovariance(
+                last_insnavgeod_.heading_std_dev);
+            covAttValid = !std::isnan(last_insnavgeod_.roll_std_dev) &&
+                          !std::isnan(last_insnavgeod_.pitch_std_dev) &&
+                          !std::isnan(last_insnavgeod_.heading_std_dev);
         } else
         {
             covAtt_local(0, 0) = -1.0;
@@ -1194,12 +1190,18 @@ namespace io {
             if ((last_insnavcart_.sb_list & 64) != 0)
             {
                 // Attitude covariancae
-                covAtt_local(0, 1) = deg2radSq(last_insnavcart_.pitch_roll_cov);
-                covAtt_local(0, 2) = deg2radSq(last_insnavcart_.heading_roll_cov);
-                covAtt_local(1, 0) = deg2radSq(last_insnavcart_.pitch_roll_cov);
-                covAtt_local(2, 1) = deg2radSq(last_insnavcart_.heading_pitch_cov);
-                covAtt_local(2, 0) = deg2radSq(last_insnavcart_.heading_roll_cov);
-                covAtt_local(1, 2) = deg2radSq(last_insnavcart_.heading_pitch_cov);
+                covAtt_local(0, 1) = parsing_utilities::convertCovariance(
+                    last_insnavcart_.pitch_roll_cov);
+                covAtt_local(0, 2) = parsing_utilities::convertCovariance(
+                    last_insnavcart_.heading_roll_cov);
+                covAtt_local(1, 0) = parsing_utilities::convertCovariance(
+                    last_insnavcart_.pitch_roll_cov);
+                covAtt_local(2, 1) = parsing_utilities::convertCovariance(
+                    last_insnavcart_.heading_pitch_cov);
+                covAtt_local(2, 0) = parsing_utilities::convertCovariance(
+                    last_insnavcart_.heading_roll_cov);
+                covAtt_local(1, 2) = parsing_utilities::convertCovariance(
+                    last_insnavcart_.heading_pitch_cov);
             }
 
             Eigen::Matrix3d R_local_ecef;
@@ -1241,6 +1243,8 @@ namespace io {
                                                       double yaw,
                                                       LocalizationMsg& msg) const
     {
+
+        parsing_utilities::setVector3NaN(msg.twist.twist.angular);
         Eigen::Matrix3d R_local_body =
             parsing_utilities::rpyToRot(roll, pitch, yaw).inverse();
         if ((last_insnavgeod_.sb_list & 8) != 0)
@@ -1266,9 +1270,7 @@ namespace io {
             msg.twist.twist.linear.z = vel_body(2);
         } else
         {
-            msg.twist.twist.linear.x = std::numeric_limits<double>::quiet_NaN();
-            msg.twist.twist.linear.y = std::numeric_limits<double>::quiet_NaN();
-            msg.twist.twist.linear.z = std::numeric_limits<double>::quiet_NaN();
+            parsing_utilities::setVector3NaN(msg.twist.twist.linear);
         }
         Eigen::Matrix3d covVel_local = Eigen::Matrix3d::Zero();
         if ((last_insnavgeod_.sb_list & 16) != 0)
@@ -1347,6 +1349,71 @@ namespace io {
         msg.twist.covariance[35] = -1.0;
     }
 
+    void MessageHandler::setStatus(uint8_t mode, NavSatFixMsg& msg)
+    {
+        switch (mode & 15)
+        {
+        case evNoPVT:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_NO_FIX;
+            break;
+        }
+        case evStandAlone:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evFixed:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evDGPS:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evRTKFixed:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evRTKFloat:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evMovingBaseRTKFixed:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evMovingBaseRTKFloat:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evPPP:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evSBAS:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_SBAS_FIX;
+            break;
+        }
+        default:
+        {
+            msg.status.status = NavSatStatusMsg::STATUS_NO_FIX;
+            node_->log(
+                log_level::DEBUG,
+                "PVTGeodetic's Mode field contains an invalid type of PVT solution.");
+            break;
+        }
+        }
+    }
+
     /**
      * The position_covariance array is populated in row-major order, where the basis
      * of the corresponding matrix is ENU (so Cov_lonlon is in location 11 of the
@@ -1359,10 +1426,9 @@ namespace io {
         if (!settings_->publish_navsatfix)
             return;
 
-        static auto last_ins_tow = last_insnavgeod_.block_header.tow;
+        thread_local auto last_ins_tow = last_insnavgeod_.block_header.tow;
 
         NavSatFixMsg msg;
-        uint16_t mask = 15; // We extract the first four bits using this mask.
         if (settings_->septentrio_receiver_type == "gnss")
         {
             if ((!validValue(last_pvtgeodetic_.block_header.tow)) ||
@@ -1372,43 +1438,8 @@ namespace io {
 
             msg.header = last_pvtgeodetic_.header;
 
-            uint16_t type_of_pvt = ((uint16_t)(last_pvtgeodetic_.mode)) & mask;
-            switch (type_of_pvt)
-            {
-            case evNoPVT:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_NO_FIX;
-                break;
-            }
-            case evStandAlone:
-            case evFixed:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_FIX;
-                break;
-            }
-            case evDGPS:
-            case evRTKFixed:
-            case evRTKFloat:
-            case evMovingBaseRTKFixed:
-            case evMovingBaseRTKFloat:
-            case evPPP:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_GBAS_FIX;
-                break;
-            }
-            case evSBAS:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_SBAS_FIX;
-                break;
-            }
-            default:
-            {
-                node_->log(
-                    log_level::DEBUG,
-                    "PVTGeodetic's Mode field contains an invalid type of PVT solution.");
-                break;
-            }
-            }
+            setStatus(last_pvtgeodetic_.mode, msg);
+
             bool gps_in_pvt = false;
             bool glo_in_pvt = false;
             bool com_in_pvt = false;
@@ -1457,43 +1488,8 @@ namespace io {
 
             msg.header = last_insnavgeod_.header;
 
-            switch (last_insnavgeod_.gnss_mode)
-            {
-            case evNoPVT:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_NO_FIX;
-                break;
-            }
-            case evStandAlone:
-            case evFixed:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_FIX;
-                break;
-            }
-            case evDGPS:
-            case evRTKFixed:
-            case evRTKFloat:
-            case evMovingBaseRTKFixed:
-            case evMovingBaseRTKFloat:
-            case evPPP:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_GBAS_FIX;
-                break;
-            }
-            case evSBAS:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_SBAS_FIX;
-                break;
-            }
-            default:
-            {
-                node_->log(
-                    log_level::DEBUG,
-                    "INSNavGeod's Mode field contains an invalid type of PVT solution:" +
-                        std::to_string((uint16_t)(last_insnavgeod_.gnss_mode)));
-                break;
-            }
-            }
+            setStatus(last_insnavgeod_.gnss_mode, msg);
+
             bool gps_in_pvt = false;
             bool glo_in_pvt = false;
             bool com_in_pvt = false;
@@ -1544,6 +1540,80 @@ namespace io {
         }
         publish<NavSatFixMsg>("navsatfix", msg);
     };
+
+    void MessageHandler::setStatus(uint8_t mode, GpsFixMsg& msg)
+    {
+        switch (mode & 15)
+        {
+        case evNoPVT:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_NO_FIX;
+            break;
+        }
+        case evStandAlone:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evFixed:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_FIX;
+            break;
+        }
+        case evDGPS:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_DGPS_FIX;
+            break;
+        }
+        case evRTKFixed:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_DGPS_FIX;
+            break;
+        }
+        case evRTKFloat:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_DGPS_FIX;
+            break;
+        }
+        case evMovingBaseRTKFixed:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_DGPS_FIX;
+            break;
+        }
+        case evMovingBaseRTKFloat:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_DGPS_FIX;
+            break;
+        }
+        case evPPP:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_DGPS_FIX;
+            break;
+        }
+        case evSBAS:
+        {
+            uint16_t reference_id = last_pvtgeodetic_.reference_id;
+            // Here come the PRNs of the 4 WAAS satellites..
+            if (reference_id == 131 || reference_id == 133 || reference_id == 135 ||
+                reference_id == 135)
+            {
+                msg.status.status = GpsStatusMsg::STATUS_WAAS_FIX;
+            } else
+            {
+                msg.status.status = GpsStatusMsg::STATUS_SBAS_FIX;
+            }
+            break;
+        }
+        default:
+        {
+            msg.status.status = GpsStatusMsg::STATUS_NO_FIX;
+            node_->log(
+                log_level::DEBUG,
+                "PVTGeodetic's Mode field contains an invalid type of PVT solution.");
+            break;
+        }
+        }
+    }
 
     /**
      * Note that the field "dip" denotes the local magnetic inclination in degrees
@@ -1660,7 +1730,7 @@ namespace io {
                         static_cast<int32_t>(channel_sat_info.sv_id));
                     elevation_tracked.push_back(
                         static_cast<int32_t>(channel_sat_info.elev));
-                    static uint16_t azimuth_mask = 511;
+                    constexpr uint16_t azimuth_mask = 511;
                     azimuth_tracked.push_back(static_cast<int32_t>(
                         (channel_sat_info.az_rise_set & azimuth_mask)));
                 }
@@ -1719,56 +1789,8 @@ namespace io {
         {
             msg.header = last_pvtgeodetic_.header;
 
-            // PVT Status Analysis
-            uint16_t status_mask =
-                15; // We extract the first four bits using this mask.
-            uint16_t type_of_pvt =
-                ((uint16_t)(last_pvtgeodetic_.mode)) & status_mask;
-            switch (type_of_pvt)
-            {
-            case evNoPVT:
-            {
-                msg.status.status = GpsStatusMsg::STATUS_NO_FIX;
-                break;
-            }
-            case evStandAlone:
-            case evFixed:
-            {
-                msg.status.status = GpsStatusMsg::STATUS_FIX;
-                break;
-            }
-            case evDGPS:
-            case evRTKFixed:
-            case evRTKFloat:
-            case evMovingBaseRTKFixed:
-            case evMovingBaseRTKFloat:
-            case evPPP:
-            {
-                msg.status.status = GpsStatusMsg::STATUS_GBAS_FIX;
-                break;
-            }
-            case evSBAS:
-            {
-                uint16_t reference_id = last_pvtgeodetic_.reference_id;
-                // Here come the PRNs of the 4 WAAS satellites..
-                if (reference_id == 131 || reference_id == 133 ||
-                    reference_id == 135 || reference_id == 135)
-                {
-                    msg.status.status = GpsStatusMsg::STATUS_WAAS_FIX;
-                } else
-                {
-                    msg.status.status = GpsStatusMsg::STATUS_SBAS_FIX;
-                }
-                break;
-            }
-            default:
-            {
-                node_->log(
-                    log_level::DEBUG,
-                    "PVTGeodetic's Mode field contains an invalid type of PVT solution.");
-                break;
-            }
-            }
+            setStatus(last_pvtgeodetic_.mode, msg);
+
             // Doppler is not used when calculating the velocities of, say,
             // mosaic-x5, hence:
             msg.status.motion_source = GpsStatusMsg::SOURCE_POINTS;
@@ -1877,43 +1899,8 @@ namespace io {
         {
             msg.header = last_insnavgeod_.header;
 
-            switch (last_insnavgeod_.gnss_mode)
-            {
-            case evNoPVT:
-            {
-                msg.status.status = GpsStatusMsg::STATUS_NO_FIX;
-                break;
-            }
-            case evStandAlone:
-            case evFixed:
-            {
-                msg.status.status = GpsStatusMsg::STATUS_FIX;
-                break;
-            }
-            case evDGPS:
-            case evRTKFixed:
-            case evRTKFloat:
-            case evMovingBaseRTKFixed:
-            case evMovingBaseRTKFloat:
-            case evPPP:
-            {
-                msg.status.status = GpsStatusMsg::STATUS_GBAS_FIX;
-                break;
-            }
-            case evSBAS:
-            {
-                msg.status.status = NavSatStatusMsg::STATUS_SBAS_FIX;
-                break;
-            }
-            default:
-            {
-                node_->log(
-                    log_level::DEBUG,
-                    "INSNavGeod's Mode field contains an invalid type of PVT solution:" +
-                        std::to_string((uint16_t)(last_insnavgeod_.gnss_mode)));
-                break;
-            }
-            }
+            setStatus(last_insnavgeod_.gnss_mode, msg);
+
             // Doppler is not used when calculating the velocities of, say,
             // mosaic-x5, hence:
             msg.status.motion_source = GpsStatusMsg::SOURCE_POINTS;
@@ -2106,13 +2093,13 @@ namespace io {
 
         // conversion from GPS time of week and week number to UTC taking leap
         // seconds into account
-        static uint64_t secToNSec = 1000000000;
-        static uint64_t mSec2NSec = 1000000;
-        static uint64_t nsOfGpsStart =
+        constexpr uint64_t secToNSec = 1000000000;
+        constexpr uint64_t mSec2NSec = 1000000;
+        constexpr uint64_t nsOfGpsStart =
             315964800 *
             secToNSec; // GPS week counter starts at 1980-01-06 which is
                        // 315964800 seconds since Unix epoch (1970-01-01 UTC)
-        static uint64_t nsecPerWeek = 7 * 24 * 60 * 60 * secToNSec;
+        constexpr uint64_t nsecPerWeek = 7 * 24 * 60 * 60 * secToNSec;
 
         time_obj = nsOfGpsStart + tow * mSec2NSec + wnc * nsecPerWeek;
 
@@ -2410,6 +2397,12 @@ namespace io {
             {
                 frame_id = settings_->frame_id;
             }
+
+            if (settings_->publish_imu && hasImuMeas_)
+            {
+                assembleImu();
+            }
+            hasImuMeas_ = false;
             assembleHeader(frame_id, telegram, last_insnavgeod_);
             if (settings_->publish_insnavgeod)
                 publish<INSNavGeodMsg>("insnavgeod", last_insnavgeod_);
@@ -2516,11 +2509,10 @@ namespace io {
         }
         case EXT_SENSOR_MEAS:
         {
-            bool hasImuMeas = false;
             if (!ExtSensorMeasParser(node_, telegram->message.begin(),
                                      telegram->message.end(), last_extsensmeas_,
                                      settings_->use_ros_axis_orientation,
-                                     hasImuMeas))
+                                     hasImuMeas_))
             {
                 node_->log(log_level::ERROR, "parse error in ExtSensorMeas");
                 break;
@@ -2528,10 +2520,6 @@ namespace io {
             assembleHeader(settings_->imu_frame_id, telegram, last_extsensmeas_);
             if (settings_->publish_extsensormeas)
                 publish<ExtSensorMeasMsg>("extsensormeas", last_extsensmeas_);
-            if (settings_->publish_imu && hasImuMeas)
-            {
-                assembleImu();
-            }
             break;
         }
         case CHANNEL_STATUS:

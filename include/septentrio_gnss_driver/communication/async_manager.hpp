@@ -93,6 +93,8 @@ namespace io {
         virtual ~AsyncManagerBase() {}
         //! Connects the stream
         [[nodiscard]] virtual bool connect() = 0;
+
+        virtual void close() = 0;
         //! Sends commands to the receiver
         virtual void send(const std::string& cmd) = 0;
         bool connected() { return false; };
@@ -120,6 +122,8 @@ namespace io {
 
         [[nodiscard]] bool connect();
 
+        void close();
+
         void setPort(const std::string& port);
 
         void send(const std::string& cmd);
@@ -128,7 +132,7 @@ namespace io {
 
     private:
         void receive();
-        void runIoService();
+        void runIoContext();
         void runWatchdog();
         void write(const std::string& cmd);
         void resync();
@@ -142,7 +146,7 @@ namespace io {
 
         //! Pointer to the node
         ROSaicNodeBase* node_;
-        std::shared_ptr<boost::asio::io_service> ioService_;
+        std::shared_ptr<boost::asio::io_context> ioContext_;
         IoType ioInterface_;
         std::atomic<bool> running_;
         std::thread ioThread_;
@@ -162,8 +166,8 @@ namespace io {
     template <typename IoType>
     AsyncManager<IoType>::AsyncManager(ROSaicNodeBase* node,
                                        TelegramQueue* telegramQueue) :
-        node_(node), ioService_(new boost::asio::io_service),
-        ioInterface_(node, ioService_), telegramQueue_(telegramQueue)
+        node_(node), ioContext_(std::make_shared<boost::asio::io_context>()),
+        ioInterface_(node, ioContext_), telegramQueue_(telegramQueue)
     {
         node_->log(log_level::DEBUG, "AsyncManager created.");
     }
@@ -171,17 +175,8 @@ namespace io {
     template <typename IoType>
     AsyncManager<IoType>::~AsyncManager()
     {
-        running_ = false;
-        ioInterface_.close();
-        node_->log(log_level::DEBUG, "AsyncManager shutting down threads");
-        if (ioThread_.joinable())
-        {
-            ioService_->stop();
-            ioThread_.join();
-        }
-        if (watchdogThread_.joinable())
-            watchdogThread_.join();
-        node_->log(log_level::DEBUG, "AsyncManager threads stopped");
+        if (connected_)
+            close();
     }
 
     template <typename IoType>
@@ -200,6 +195,23 @@ namespace io {
     }
 
     template <typename IoType>
+    void AsyncManager<IoType>::close()
+    {
+        running_ = false;
+        connected_ = false;
+        ioInterface_.close();
+        node_->log(log_level::DEBUG, "AsyncManager shutting down threads");
+        if (ioThread_.joinable())
+        {
+            ioContext_->stop();
+            ioThread_.join();
+        }
+        if (watchdogThread_.joinable())
+            watchdogThread_.join();
+        node_->log(log_level::DEBUG, "AsyncManager threads stopped");
+    }
+
+    template <typename IoType>
     void AsyncManager<IoType>::setPort(const std::string& port)
     {
         ioInterface_.setPort(port);
@@ -215,7 +227,8 @@ namespace io {
             return;
         }
 
-        ioService_->post(boost::bind(&AsyncManager<IoType>::write, this, cmd));
+        boost::asio::post(*ioContext_,
+                          boost::bind(&AsyncManager<IoType>::write, this, cmd));
     }
 
     template <typename IoType>
@@ -229,17 +242,18 @@ namespace io {
     {
         resync();
         ioThread_ =
-            std::thread(std::bind(&AsyncManager<IoType>::runIoService, this));
+            std::thread(std::bind(&AsyncManager<IoType>::runIoContext, this));
         if (!watchdogThread_.joinable())
             watchdogThread_ =
                 std::thread(std::bind(&AsyncManager::runWatchdog, this));
     }
 
     template <typename IoType>
-    void AsyncManager<IoType>::runIoService()
+    void AsyncManager<IoType>::runIoContext()
     {
-        ioService_->run();
-        node_->log(log_level::DEBUG, "AsyncManager ioService terminated.");
+        ioContext_->restart();
+        ioContext_->run();
+        node_->log(log_level::DEBUG, "AsyncManager ioContext terminated.");
     }
 
     template <typename IoType>
@@ -248,7 +262,7 @@ namespace io {
         while (running_)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            if (running_ && ioService_->stopped())
+            if (running_ && ioContext_->stopped())
             {
                 if (node_->settings()->read_from_sbf_log ||
                     node_->settings()->read_from_pcap)
@@ -259,15 +273,12 @@ namespace io {
                     break;
                 } else
                 {
-                    connected_ = false;
                     node_->log(log_level::ERROR,
                                "AsyncManager connection lost. Trying to reconnect.");
-                    ioService_->reset();
                     ioThread_.join();
-                    while (!ioInterface_.connect())
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                    connected_ = true;
-                    receive();
+                    connected_ = ioInterface_.connect();
+                    if (connected_)
+                        receive();
                 }
             } else if (running_ && std::is_same<TcpIo, IoType>::value)
             {
@@ -275,7 +286,10 @@ namespace io {
                 std::string empty = " ";
                 boost::asio::async_write(
                     *(ioInterface_.stream_), boost::asio::buffer(empty.data(), 1),
-                    [](boost::system::error_code ec, std::size_t /*length*/) {});
+                    [this](boost::system::error_code ec, std::size_t /*length*/) {
+                        if (ec)
+                            ioContext_->stop();
+                    });
             }
         }
     }
@@ -305,7 +319,7 @@ namespace io {
     template <typename IoType>
     void AsyncManager<IoType>::resync()
     {
-        telegram_.reset(new Telegram);
+        telegram_ = std::make_shared<Telegram>();
         readSync<0>();
     }
 
@@ -448,7 +462,7 @@ namespace io {
                             {
                                 node_->log(
                                     log_level::DEBUG,
-                                    "AsyncManager sync read fault, should never come here.");
+                                    "AsyncManager sync read fault, unknown sync byte 2 found.");
                                 resync();
                                 break;
                             }
@@ -460,13 +474,25 @@ namespace io {
                             log_level::DEBUG,
                             "AsyncManager sync read fault, wrong number of bytes read: " +
                                 std::to_string(numBytes));
-                        resync();
                     }
                 } else
                 {
-                    node_->log(log_level::DEBUG,
-                               "AsyncManager sync read error: " + ec.message());
-                    resync();
+                    if (connected_)
+                        node_->log(log_level::DEBUG,
+                                   "AsyncManager sync read error: " + ec.message());
+
+                    if ((boost::asio::error::eof == ec) ||
+                        (boost::asio::error::network_unreachable == ec) ||
+                        (boost::asio::error::interrupted == ec) ||
+                        (boost::asio::error::bad_descriptor == ec) ||
+                        (boost::asio::error::connection_reset == ec))
+                    {
+                        ioContext_->stop();
+                    } else
+                    {
+                        if (connected_)
+                            resync();
+                    }
                 }
             });
     }
@@ -589,7 +615,7 @@ namespace io {
                         {
                         case SYNC_BYTE_1:
                         {
-                            telegram_.reset(new Telegram);
+                            telegram_ = std::make_shared<Telegram>();
                             telegram_->message[0] = buf_[0];
                             telegram_->stamp = node_->getTime();
                             node_->log(

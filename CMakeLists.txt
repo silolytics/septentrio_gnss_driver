@@ -33,10 +33,7 @@ find_package(catkin QUIET)
 
 if(catkin_FOUND)
   ## ROS 1 -----------------------------------------------------------------------------------------------  
-  add_compile_definitions(ROS1)
-  set(ENV{ROS_VERSION} "2")
-
-  configure_file(${CMAKE_SOURCE_DIR}/msg_cache/BlockHeaderRos1.msg ${CMAKE_SOURCE_DIR}/msg/BlockHeader.msg COPYONLY)
+  set(ENV{ROS_VERSION} "1")
 
   ## Dependencies
   find_package(catkin REQUIRED COMPONENTS
@@ -130,6 +127,7 @@ if(catkin_FOUND)
     ${libpcap_LIBRARIES}
     ${GeographicLib_LIBRARIES}
   )
+  target_compile_definitions(${PROJECT_NAME}_node PUBLIC ROS1)
  
   # Installation
   install(TARGETS ${PROJECT_NAME}_node
@@ -144,10 +142,10 @@ if(catkin_FOUND)
   #-------------------------------------------------------------------------------------------------------
 elseif(ament_cmake_FOUND)
   ## ROS 2 -----------------------------------------------------------------------------------------------
-  add_compile_definitions(ROS2)
   set(ENV{ROS_VERSION} "2")
 
-  configure_file(${CMAKE_SOURCE_DIR}/msg_cache/BlockHeaderRos2.msg ${CMAKE_SOURCE_DIR}/msg/BlockHeader.msg COPYONLY)
+  unset(CATKIN_INSTALL_INTO_PREFIX_ROOT)
+  unset(CATKIN_SYMLINK_INSTALL)
 
   # Dependencies
   find_package(ament_cmake REQUIRED)
@@ -164,14 +162,19 @@ elseif(ament_cmake_FOUND)
   find_package(tf2_eigen REQUIRED)
   find_package(tf2_geometry_msgs REQUIRED)
   find_package(tf2_ros REQUIRED)
+<<<<<<< HEAD
   find_package(rtcm_msgs REQUIRED)
+=======
+  find_package(gtest_vendor REQUIRED)
+  find_package(ament_cmake_ros REQUIRED)
+>>>>>>> upstream/master
   
   ## Declare  messages
   rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/AIMPlusStatus.msg"
   "msg/BaseVectorCart.msg"
   "msg/BaseVectorGeod.msg"
-  "msg/BlockHeader.msg"
+  "${CMAKE_CURRENT_SOURCE_DIR}/msg_ros2:msg/BlockHeader.msg"
   "msg/GALAuthStatus.msg"
   "msg/RFBand.msg"
   "msg/RFStatus.msg"
@@ -231,6 +234,7 @@ elseif(ament_cmake_FOUND)
   src/septentrio_gnss_driver/parsers/parsing_utilities.cpp 
   src/septentrio_gnss_driver/parsers/string_utilities.cpp 
   )
+  target_compile_definitions(${library_name} PUBLIC ROS2)
   target_include_directories(${library_name} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"  
   "$<INSTALL_INTERFACE:include>"
@@ -252,7 +256,7 @@ elseif(ament_cmake_FOUND)
     rosidl_get_typesupport_target(
     cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
     target_link_libraries(${library_name} "${cpp_typesupport_target}")
-    add_compile_definitions(ROS2_VER_N250)
+    target_compile_definitions(${library_name} PUBLIC ROS2_VER_N250)
   endif()
 
   ## executable

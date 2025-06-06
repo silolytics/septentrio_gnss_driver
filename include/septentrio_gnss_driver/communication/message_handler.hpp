@@ -322,9 +322,19 @@ namespace io {
         int32_t current_leap_seconds_ = -128;
 
         /**
+         * @brief Set status of NavSatFix messages
+         */
+        void setStatus(uint8_t mode, NavSatFixMsg& msg);
+
+        /**
          * @brief "Callback" function when constructing NavSatFix messages
          */
         void assembleNavSatFix();
+
+        /**
+         * @brief Set status of GPSFix messages
+         */
+        void setStatus(uint8_t mode, GpsFixMsg& msg);
 
         /**
          * @brief "Callback" function when constructing GPSFix messages
@@ -361,6 +371,7 @@ namespace io {
          * ImuMsg messages
          */
         void assembleImu();
+        bool hasImuMeas_ = false;
 
         /**
          * @brief "Callback" function when constructing

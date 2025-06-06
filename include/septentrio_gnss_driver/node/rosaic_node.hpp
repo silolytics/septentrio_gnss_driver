@@ -90,7 +90,10 @@ namespace rosaic_node {
         //! messages, and publishes requested ROS messages...
         ROSaicNode(const rclcpp::NodeOptions& options);
 
+        ~ROSaicNode();
+
     private:
+        void setup();
         /**
          * @brief Gets the node parameters from the ROS Parameter Server, parts of
          * which are specified in a YAML file
@@ -132,6 +135,7 @@ namespace rosaic_node {
         tf2_ros::Buffer tfBuffer_;
         std::unique_ptr<tf2_ros::TransformListener> tfListener_;
 
+<<<<<<< HEAD
         /**
          * @brief Suscription to external ntrip to send it to device
          * 
@@ -149,5 +153,8 @@ namespace rosaic_node {
 
 
 
+=======
+        std::thread setupThread_;
+>>>>>>> upstream/master
     };
 } // namespace rosaic_node
