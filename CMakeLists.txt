@@ -162,12 +162,9 @@ elseif(ament_cmake_FOUND)
   find_package(tf2_eigen REQUIRED)
   find_package(tf2_geometry_msgs REQUIRED)
   find_package(tf2_ros REQUIRED)
-<<<<<<< HEAD
   find_package(rtcm_msgs REQUIRED)
-=======
   find_package(gtest_vendor REQUIRED)
   find_package(ament_cmake_ros REQUIRED)
->>>>>>> upstream/master
   
   ## Declare  messages
   rosidl_generate_interfaces(${PROJECT_NAME}
@@ -304,7 +301,6 @@ elseif(ament_cmake_FOUND)
   )
 
   ament_package()
-  ##-------------------------------------------------------------------------
 else()
   message(FATAL_ERROR "Build failed because neither catkin nor ament found.")
 endif()
