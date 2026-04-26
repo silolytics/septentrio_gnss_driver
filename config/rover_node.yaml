@@ -29,7 +29,7 @@ septentrio_gnss:
         ntp_server: ""
         keep_open: true
   
-      frame_id: gps
+      frame_id: gps_1
   
       imu_frame_id: imu
   
@@ -37,7 +37,7 @@ septentrio_gnss:
   
       vsm_frame_id: vsm
   
-      aux1_frame_id: gps_base
+      aux1_frame_id: gps_base_1
   
       vehicle_frame_id: base_link
   
